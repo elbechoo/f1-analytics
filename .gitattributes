@@ -1,0 +1,10 @@
+# Normalise line endings. Without this, committing from Windows stores CRLF
+# and the workflows then run shell steps on a Linux runner against files that
+# end in \r, which fails in ways that read as a logic error rather than an
+# encoding one. Text is stored LF in the repository and checked out however
+# the local platform prefers.
+* text=auto eol=lf
+
+*.duckdb binary
+*.parquet binary
+*.png binary

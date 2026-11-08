@@ -59,12 +59,21 @@ likelihood and increases it at every step. Three things keep the output honest:
 `fct_calibration_duel` materialises the residuals, and both the test suite and
 the page read it, so they cannot drift apart.
 
-The residuals are not noise. Every large one is a **late-career** pairing, and
-in each of them the model favours the veteran. One strength is fitted per
-driver for an entire career, so a driver is scored in their last season with a
-rating earned at their peak. That limitation has its own warn-level test which
-prints the current size of the bias on every build, and it has a section on the
-page rather than a footnote.
+Across 67 well-observed pairings the mean absolute error is 0.060 and the worst
+single miss is 0.258.
+
+The largest residuals are not randomly distributed. The worst of them are
+**late-career** pairings in which the model favours the veteran: Ricciardo
+against Tsunoda in 2023-24, Stroll against Vettel in 2021-22, Schumacher
+against Rosberg in 2010-12. One strength is fitted per driver for an entire
+career, so a driver is scored in their final season with a rating earned at
+their peak.
+
+What is **not** supported is a claim that this bias holds across all late
+pairings. A warn-level test measures exactly that and does not currently fire,
+so the effect is visible in the tail and small in aggregate. The test prints
+the number on every build precisely so the claim stays tied to the data rather
+than to the first pattern someone noticed.
 
 ### The rules as a variable
 

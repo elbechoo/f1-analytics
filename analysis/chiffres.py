@@ -33,6 +33,24 @@ REQUETES = [
     ("paires_cal", "select count(*) from main_marts.fct_calibration_duel"),
     ("erreur_moy", "select round(avg(ecart), 4) from main_marts.fct_calibration_duel"),
     ("pire_ecart", "select round(max(ecart), 4) from main_marts.fct_calibration_duel"),
+    # The late-career bias the warn test watches. Printed whether or not it
+    # trips, because "the test did not fire" is not the same as "there is no
+    # bias" and the README should quote the number rather than the verdict.
+    ("biais_paires",
+     "select count(*) from main_marts.fct_calibration_duel "
+     "where greatest(anciennete_a, anciennete_b) >= 8 "
+     "  and abs(anciennete_a - anciennete_b) >= 4"),
+    ("biais_moyen",
+     "select round(avg(case when anciennete_a >= anciennete_b then residu "
+     "                      else -residu end), 4) "
+     "from main_marts.fct_calibration_duel "
+     "where greatest(anciennete_a, anciennete_b) >= 8 "
+     "  and abs(anciennete_a - anciennete_b) >= 4"),
+    ("biais_top10",
+     "select round(avg(case when anciennete_a >= anciennete_b then residu "
+     "                      else -residu end), 4) from ("
+     "  select * from main_marts.fct_calibration_duel "
+     "  order by ecart desc limit 10)"),
     ("saisons_basculantes",
      "select count(*) from main_marts.fct_titre_sensible "
      "where titre_depend_du_bareme"),
