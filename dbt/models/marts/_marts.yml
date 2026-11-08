@@ -1,0 +1,216 @@
+version: 2
+
+models:
+  - name: dim_pilote
+    description: One row per driver with at least one race start.
+    columns:
+      - name: pilote_id
+        tests: [unique, not_null]
+      - name: nom_complet
+        tests: [not_null]
+      - name: nb_departs
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: dim_ecurie
+    columns:
+      - name: ecurie_id
+        tests: [unique, not_null]
+      - name: nom_ecurie
+        tests: [not_null]
+
+  - name: dim_circuit
+    columns:
+      - name: circuit_id
+        tests: [unique, not_null]
+
+  - name: dim_course
+    description: "Grain: one Grand Prix."
+    columns:
+      - name: course_id
+        tests: [unique, not_null]
+      - name: saison
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1950
+                max_value: 2026
+      - name: nb_partants
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: dim_pilote_ecurie_scd2
+    description: >
+      Type 2 dimension: one row per continuous spell a driver spent at a
+      constructor, with validity dates. Derived from race history rather than
+      captured by dbt snapshot - see the model for why.
+    columns:
+      - name: periode_id
+        tests: [unique, not_null]
+      - name: pilote_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: ecurie_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_ecurie')
+                field: ecurie_id
+
+  - name: fct_resultat
+    description: "Grain: one driver in one race, 1950 to date."
+    columns:
+      - name: resultat_id
+        tests: [unique, not_null]
+      - name: course_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_course')
+                field: course_id
+      - name: pilote_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: ecurie_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_ecurie')
+                field: ecurie_id
+      - name: points
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: fct_duel_coequipiers
+    description: >
+      "Grain: one driver, in one race, versus their single teammate. Only
+      races where both were classified and the team ran exactly two cars."
+    columns:
+      - name: duel_id
+        tests: [unique, not_null]
+      - name: pilote_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: coequipier_id
+        tests: [not_null]
+      - name: bat_coequipier_course
+        tests: [not_null]
+
+  - name: fct_force_pilote
+    description: >
+      "Grain: one driver. Bradley-Terry strength fitted to teammate results,
+      so drivers who were never teammates become comparable through the chain
+      of drivers who were. Includes a bootstrap interval."
+    columns:
+      - name: pilote_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: force
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: nb_duels
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: fct_championnat_contrefactuel
+    description: >
+      "Grain: one driver, one season, one scoring system. Every season
+      rescored under every points table the sport has used."
+    columns:
+      - name: ligne_id
+        tests: [unique, not_null]
+      - name: pilote_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: points
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: fct_titre_sensible
+    description: >
+      "Grain: one season. Whether the driver at the top of the table survives
+      a change of scoring system."
+    columns:
+      - name: saison
+        tests: [unique, not_null]
+      - name: nb_champions_possibles
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: fct_part_voiture
+    description: >
+      "Grain: one season. Share of the variance in finishing position that
+      sits between constructors rather than within them."
+    columns:
+      - name: saison
+        tests: [unique, not_null]
+      - name: part_ecurie
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: fct_calibration_duel
+    description: >
+      "Grain: one pair of drivers with at least twenty duels together.
+      Observed versus predicted share, so the model's residuals are a table
+      the tests and the dashboard both read."
+    columns:
+      - name: paire_id
+        tests: [unique, not_null]
+      - name: part_observee
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: part_predite
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1

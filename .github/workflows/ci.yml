@@ -1,0 +1,44 @@
+name: ci
+
+# Runs on every push. Deliberately narrow about what it claims to prove.
+#
+# The data tests cannot run here: the warehouse is a build output, it is not
+# in the repository, and rebuilding it from the API inside a pull request
+# would take longer than the rate limit allows. What this job checks is that
+# the project is internally consistent, which is the class of mistake a push
+# actually introduces: a ref to a model that does not exist, a test pointing
+# at a column that was renamed, a YAML file that no longer parses, a Python
+# model that does not import.
+#
+# The data tests run weekly in refresh.yml against the real warehouse, and
+# that job going red is the real signal. Saying so here rather than dressing
+# this up as full coverage.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Compile every model and test
+        working-directory: dbt
+        # parse resolves the whole graph: refs, sources, tests, model configs.
+        # An empty database is enough for it and is created on connect.
+        run: |
+          dbt deps
+          dbt parse --profiles-dir .
+
+      - name: Python models and scripts import cleanly
+        run: |
+          python -m compileall -q ingest analysis dbt/models

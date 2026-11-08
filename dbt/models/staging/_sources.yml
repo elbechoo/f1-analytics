@@ -1,0 +1,22 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw Jolpica API responses, one row per HTTP call, stored whole as JSON.
+      Nothing is shredded at load time on purpose: reshaping in the loader is
+      reshaping where nobody can test it. Staging does the shredding and the
+      tests sit on top of that.
+    schema: raw
+    tables:
+      - name: reponses
+        columns:
+          - name: endpoint
+            tests: [not_null]
+          - name: charge
+            tests: [not_null]
+      - name: progression
+        description: >
+          Which (endpoint, season, round) triples have been fetched. The
+          fetcher reads this to skip finished work, which is what makes
+          hitting the hourly rate limit an interruption rather than a failure.

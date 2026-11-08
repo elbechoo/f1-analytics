@@ -1,0 +1,35 @@
+name: f1
+version: "1.0.0"
+config-version: 2
+profile: f1
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  f1:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts
+
+# No snapshots. The driver-and-constructor history is a derived Type 2
+# dimension rebuilt from results each run, not a snapshot of a changing
+# source: the source is immutable, so there is nothing to capture over time.
+# See the header of dim_pilote_ecurie_scd2.
+
+vars:
+  # Lap timings are only fetched from this season on: the API pages at 100
+  # and a race is ~1,100 timings, so history is expensive.
+  #
+  # Nothing reads this yet. The laps have not been fetched and no model
+  # consumes them, so the value is a declared intention rather than a
+  # described fact. The first model that touches laps must filter on this
+  # rather than assume the history goes back further than it does.
+  laps_depuis: 2023

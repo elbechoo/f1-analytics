@@ -1,0 +1,193 @@
+name: refresh
+
+# Keeps the warehouse and the published page current without anyone touching
+# them. Nothing here runs on a laptop and nothing is pushed by hand: GitHub
+# fetches new results, rebuilds, runs the tests and republishes the page.
+#
+# Schedule, and why it is shaped this way
+# ---------------------------------------
+# Race weekends (Friday through Monday) are polled every thirty minutes. The
+# rest of the week gets two runs. That is as close to live as this project can
+# honestly get, and the limit is the source, not the schedule: the results API
+# publishes a classification once it is official, some time after the flag. No
+# polling interval turns an after-the-fact results feed into live timing.
+#
+# Polling that often is only reasonable because of the check below. Almost
+# every race-weekend run finds nothing new, and a run that finds nothing new
+# stops before the expensive part instead of spending four minutes rebuilding
+# a byte-identical page.
+#
+# Actions minutes are free on public repositories, so the cost of the frequent
+# runs is not money. It is API calls, and the check keeps those to one cheap
+# request per poll.
+#
+# The job is idempotent. It assumes neither that it is the first run nor that
+# the last one finished: the fetcher keeps its own progress table, so a run
+# that dies halfway costs time and nothing else.
+
+on:
+  schedule:
+    # Race weekends. Friday to Monday covers every session in every time zone
+    # the calendar visits, including the Saturday races and the Monday-morning
+    # finishes that Australia and Las Vegas produce in UTC.
+    - cron: "*/30 * * * 5,6,0,1"
+    # Midweek, for amendments and to keep the Actions cache from expiring:
+    # GitHub drops a cache after seven days without a read.
+    - cron: "40 5 * * 2"
+    - cron: "40 5 * * 3"
+  workflow_dispatch:
+    inputs:
+      refresh_from:
+        description: "Re-fetch every season from this one on (blank = current year)"
+        required: false
+        type: string
+      force:
+        description: "Rebuild and redeploy even if nothing changed"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  # write only so the keepalive step can commit a date stamp.
+  contents: write
+  pages: write
+  id-token: write
+
+# A fetch must never race another copy of itself over one database. Queued
+# rather than cancelled: a half-finished fetch that gets killed is fine, but
+# cancelling mid-deploy is not.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      change: ${{ steps.verdict.outputs.change }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # The warehouse is not in git: it is a build output, and a binary one
+      # that would make every diff useless. It is cached instead, keyed so
+      # that each run restores the newest previous copy and writes its own.
+      #
+      # A cache miss is survivable rather than fatal, which is the whole
+      # reason the fetcher is resumable: with no cache the job starts from an
+      # empty database and refetches history over several runs under the rate
+      # limit, converging on its own with nobody watching.
+      - name: Restore the warehouse
+        uses: actions/cache@v4
+        with:
+          path: |
+            f1.duckdb
+            .empreinte
+          key: f1-duckdb-${{ github.run_id }}
+          restore-keys: |
+            f1-duckdb-
+
+      - name: Work out which season to re-pull
+        id: saison
+        run: |
+          saison="${{ inputs.refresh_from }}"
+          if [ -z "$saison" ]; then saison=$(date -u +%Y); fi
+          echo "annee=$saison" >> "$GITHUB_OUTPUT"
+
+      # A season already fetched is marked done and never looked at again, so
+      # the season in progress has to be forgotten explicitly or the standings
+      # freeze at whatever round had run the day it was first pulled.
+      # Completed seasons are left alone: they do not change.
+      - name: Fetch the live season
+        run: |
+          python ingest/fetch_f1.py \
+            --refresh-from "${{ steps.saison.outputs.annee }}" \
+            --only results
+
+      # The gate. Hash the season's stored payloads and compare with the hash
+      # the previous run left in the cache. A hash rather than a row count,
+      # because a penalty applied after the race rewrites a classification
+      # without adding a row, and a count would call that "no change".
+      - name: Did anything change
+        id: verdict
+        run: |
+          nouveau=$(python ingest/empreinte.py "${{ steps.saison.outputs.annee }}")
+          ancien=$(cat .empreinte 2>/dev/null || echo "aucun")
+          echo "$nouveau" > .empreinte
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "forced by hand"
+            echo "change=true" >> "$GITHUB_OUTPUT"
+          elif [ "$nouveau" = "$ancien" ]; then
+            echo "nothing new since the last run, stopping here"
+            echo "change=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new or amended results found"
+            echo "change=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Everything below only runs when there is something to rebuild. The
+      # secondary endpoints are fetched here rather than above so that a poll
+      # finding nothing costs exactly one API call.
+      #
+      # Only qualifying. The standings endpoints are deliberately NOT fetched
+      # here: no staging model reads them, so pulling them would spend API
+      # calls on rows nothing consumes, and would make the pipeline look like
+      # it feeds something it does not. Standings are derivable from results
+      # anyway, which is how fct_championnat_contrefactuel computes them. If a
+      # model ever needs the published standings as a cross-check, add the
+      # fetch back here at the same time as the model, not before it.
+      - name: Fetch the rest
+        if: steps.verdict.outputs.change == 'true'
+        run: python ingest/fetch_f1.py --only qualifying
+
+      - name: Build and test
+        if: steps.verdict.outputs.change == 'true'
+        working-directory: dbt
+        run: dbt build --profiles-dir .
+
+      - name: Render the page
+        if: steps.verdict.outputs.change == 'true'
+        run: python analysis/build_dashboard.py
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.verdict.outputs.change == 'true'
+        with:
+          path: dashboard
+
+      # GitHub disables scheduled workflows in a repository with 60 days of no
+      # commits, and a scheduled run does not itself count as activity. Out of
+      # season that is reached easily and the warning is a single email.
+      #
+      # So this writes the run date and commits it when it changes. Inline
+      # rather than one of the third-party keepalive actions, which want write
+      # access to the repository to do what fits in six lines. Nothing but the
+      # stamp is committed: the warehouse and the page stay out of git.
+      - name: Keep the schedule alive
+        if: github.event_name == 'schedule'
+        run: |
+          date -u +%Y-%m-%d > .github/derniere-execution
+          if git diff --quiet; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/derniere-execution
+          git commit -m "chore: refresh ran $(date -u +%Y-%m-%d)"
+          git push
+
+  deploy:
+    needs: refresh
+    if: needs.refresh.outputs.change == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4
