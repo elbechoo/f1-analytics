@@ -85,8 +85,16 @@ jobs:
       # reason the fetcher is resumable: with no cache the job starts from an
       # empty database and refetches history over several runs under the rate
       # limit, converging on its own with nobody watching.
+      #
+      # Restore and save are separate on purpose. The combined `actions/cache`
+      # only writes its cache when the job SUCCEEDS, and the one case this
+      # pipeline most needs to preserve is the one where it does not: a cold
+      # start hits the hourly rate limit partway through 76 seasons. Losing
+      # the partial warehouse there means the next run starts from zero and
+      # the job never converges, which is the opposite of resumable. The save
+      # step at the end therefore runs with always().
       - name: Restore the warehouse
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             f1.duckdb
@@ -106,11 +114,23 @@ jobs:
       # the season in progress has to be forgotten explicitly or the standings
       # freeze at whatever round had run the day it was first pulled.
       # Completed seasons are left alone: they do not change.
+      # Exit 2 is the fetcher's "rate limited, progress saved" code. On a cold
+      # start that is the expected outcome, not a failure: the run keeps what
+      # it got, builds from it, and the next run continues. Any other non-zero
+      # exit is a real error and stops the job.
       - name: Fetch the live season
         run: |
+          set +e
           python ingest/fetch_f1.py \
             --refresh-from "${{ steps.saison.outputs.annee }}" \
             --only results
+          code=$?
+          set -e
+          if [ "$code" = "2" ]; then
+            echo "::notice::rate limited, partial progress kept, continuing"
+          elif [ "$code" != "0" ]; then
+            exit "$code"
+          fi
 
       # The gate. Hash the season's stored payloads and compare with the hash
       # the previous run left in the cache. A hash rather than a row count,
@@ -146,7 +166,16 @@ jobs:
       # fetch back here at the same time as the model, not before it.
       - name: Fetch the rest
         if: steps.verdict.outputs.change == 'true'
-        run: python ingest/fetch_f1.py --only qualifying
+        run: |
+          set +e
+          python ingest/fetch_f1.py --only qualifying
+          code=$?
+          set -e
+          if [ "$code" = "2" ]; then
+            echo "::notice::rate limited on qualifying, continuing"
+          elif [ "$code" != "0" ]; then
+            exit "$code"
+          fi
 
       - name: Build and test
         if: steps.verdict.outputs.change == 'true'
@@ -161,6 +190,16 @@ jobs:
         if: steps.verdict.outputs.change == 'true'
         with:
           path: dashboard
+
+      # Unconditionally, including after a failure: see the restore step.
+      - name: Save the warehouse
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            f1.duckdb
+            .empreinte
+          key: f1-duckdb-${{ github.run_id }}
 
       # GitHub disables scheduled workflows in a repository with 60 days of no
       # commits, and a scheduled run does not itself count as activity. Out of
