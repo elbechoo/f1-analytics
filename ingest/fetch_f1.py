@@ -50,18 +50,37 @@ class RateLimited(Exception):
     pass
 
 
+class Injoignable(Exception):
+    """The API could not be reached at all, as opposed to refusing us."""
+
+
 def get(session: requests.Session, chemin: str, offset: int = 0) -> dict:
-    """One GET with backoff on 429 and 5xx.
+    """One GET with backoff on 429, on 5xx, and on the network itself.
 
     Retries double the wait each time. A 429 that survives five retries is
     the hourly quota rather than a burst, and no amount of waiting inside one
     run will fix it - so it raises and the caller stops cleanly, leaving the
     progress table intact for the next run.
+
+    Connection failures are retried the same way and were not, originally.
+    A DNS lookup failing for a few seconds midway through a long fetch is
+    ordinary, and it used to escape as a raw requests exception: a forty-line
+    traceback for a blip the loader could have slept through. Treating "I
+    could not reach the server" as a different thing from "the server said
+    no" is the point, because only one of them is worth stopping for.
     """
     url = f"{BASE}/{chemin}?limit={PAGE}&offset={offset}"
     attente = 2.0
     for essai in range(MAX_RETRIES):
-        r = session.get(url, timeout=60)
+        try:
+            r = session.get(url, timeout=60)
+        except requests.exceptions.RequestException as exc:
+            if essai == MAX_RETRIES - 1:
+                raise Injoignable(f"{type(exc).__name__} after "
+                                  f"{MAX_RETRIES} tries: {url}") from exc
+            time.sleep(attente)
+            attente *= 2
+            continue
         if r.status_code == 200:
             time.sleep(PAUSE)
             return r.json()["MRData"]
@@ -266,6 +285,15 @@ def main() -> None:
               "continue from where it stopped.", file=sys.stderr)
         con.close()
         raise SystemExit(2)
+    except Injoignable as exc:
+        # A different exit code from the rate limit, because they call for
+        # different responses: one means wait an hour, the other means check
+        # the network and try again now. The scheduled job only tolerates 2.
+        print(f"\ncannot reach the API: {exc}", file=sys.stderr)
+        print("Progress is saved. Check the connection and re-run; it will "
+              "continue from where it stopped.", file=sys.stderr)
+        con.close()
+        raise SystemExit(3)
     except KeyboardInterrupt:
         print("\ninterrupted - progress saved, re-run to continue", file=sys.stderr)
         con.close()

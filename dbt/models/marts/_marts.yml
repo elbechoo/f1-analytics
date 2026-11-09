@@ -214,3 +214,39 @@ models:
               arguments:
                 min_value: 0
                 max_value: 1
+
+  - name: fct_rythme_relais
+    description: >
+      "Grain: one driver's stint in one race, from the seasons lap timings
+      were fetched for. Median pace and the net slope of lap time against
+      lap number, after removing in-laps, out-laps and neutralised laps."
+    columns:
+      - name: relais_id
+        tests: [unique, not_null]
+      - name: pilote_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_pilote')
+                field: pilote_id
+      - name: no_relais
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: nb_tours_propres
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 6
+      - name: mediane_ms
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                # A lap under 50 seconds does not exist on the current
+                # calendar, and anything over six minutes is not a racing lap.
+                min_value: 50000
+                max_value: 360000

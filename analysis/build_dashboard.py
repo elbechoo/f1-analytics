@@ -159,6 +159,54 @@ def collecter(con):
                round(max(incertitude) filter (where classable))
         from main_marts.fct_force_pilote""").fetchone()
 
+    # Race pace. Each driver's quickest stint median in a race, expressed as
+    # a deficit to the quickest stint median anyone managed that race, then
+    # averaged over the season. Best stint rather than all laps, because a
+    # driver who spent half a race stuck behind a slower car has a true pace
+    # the mean would hide.
+    d["rythme_saison"] = con.execute("""
+        select max(saison) from main_marts.fct_rythme_relais""").fetchone()[0]
+
+    d["rythme"] = con.execute("""
+        with meilleur as (
+          select saison, manche, pilote_id, min(mediane_ms) as ms
+          from main_marts.fct_rythme_relais
+          where saison = ? group by 1, 2, 3),
+        reference as (
+          select saison, manche, min(ms) as ms_ref
+          from meilleur group by 1, 2),
+        ecarts as (
+          select m.pilote_id,
+                 avg(m.ms::double / r.ms_ref - 1) * 100 as deficit,
+                 count(*) as nb_courses
+          from meilleur m join reference r using (saison, manche)
+          group by 1 having count(*) >= 5)
+        select p.nom_complet, e.deficit, e.nb_courses,
+               (select ec.nom_ecurie from main_marts.fct_resultat fr
+                  join main_marts.dim_ecurie ec using (ecurie_id)
+                 where fr.pilote_id = e.pilote_id and fr.saison = ?
+                 order by fr.manche desc limit 1) as ecurie,
+               (select fr.ecurie_id from main_marts.fct_resultat fr
+                 where fr.pilote_id = e.pilote_id and fr.saison = ?
+                 order by fr.manche desc limit 1) as eid,
+               (select count(*) + 1 from main_marts.fct_resultat x
+                 where x.saison = ?
+                 group by x.pilote_id
+                 having sum(x.points) > (
+                   select sum(y.points) from main_marts.fct_resultat y
+                   where y.saison = ? and y.pilote_id = e.pilote_id)
+                 limit 1) as rang_points
+        from ecarts e
+        join main_marts.dim_pilote p using (pilote_id)
+        order by e.deficit limit 12""",
+        [d["rythme_saison"]] * 5).fetchall()
+
+    d["rythme_stats"] = con.execute("""
+        select count(*), count(distinct saison * 100 + manche),
+               min(saison), max(saison),
+               round(avg(pente_ms_par_tour) filter (where r2 >= 0.3), 1)
+        from main_marts.fct_rythme_relais""").fetchone()
+
     d["residus"] = con.execute("""
         select nom_a, nom_b, premiere_saison, derniere_saison, nb_duels,
                part_observee, part_predite, residu
@@ -424,6 +472,38 @@ def classement_force(rows, stats):
             f'same as being the best driver. It cannot see a driver who never had a '
             f'competitive seat, and it fits one strength per career, so a long '
             f'decline is averaged into the peak.</p></div>')
+
+
+def rythme(rows, stats, an):
+    """Race pace: deficit to the quickest car, averaged over the season."""
+    if not rows: return ""
+    n_relais, n_courses, s_min, s_max, pente = stats
+    mx = max(r[1] for r in rows) or 1
+    lignes = []
+    for i, (nom, deficit, nb_courses, ecn, eid, rang) in enumerate(rows, 1):
+        c = tc(eid, i)
+        lignes.append(
+          f'<div class="ry"><div class="ry-r">{i:02d}</div>'
+          f'<div class="ry-n">{e(nom)}<span>{e(ecn)} &middot; {nb} races'
+          + (f' &middot; P{rang} on points' if rang else '') + '</span></div>'
+          f'<div class="ry-p"><i style="--w:{deficit/mx*100:.1f}%;'
+          f'background:{c}"></i></div>'
+          f'<div class="ry-v">{deficit:+.2f}%</div></div>')
+    return (f'<div class="carte large"><div class="chd">'
+            f'<h3>Pace deficit to the quickest car</h3>'
+            f'<span class="chs">Each driver\'s best stint median in a race, as a '
+            f'deficit to the best anyone managed that race, averaged across the '
+            f'season. Best stint rather than all laps, because a driver who spent '
+            f'half a race behind a slower car has a true pace the mean would hide. '
+            f'Built from {nb(n_relais)} stints across {nb(n_courses)} races, '
+            f'{s_min} to {s_max}.</span></div>'
+            f'{"".join(lignes)}'
+            f'<p class="avert">Pace is not result. A driver can be quickest here and '
+            f'lower on points: that gap is strategy, traffic, reliability and '
+            f'qualifying, which this measure deliberately excludes. There is no tyre '
+            f'compound in the source, so a stint on softs and a stint on hards are '
+            f'indistinguishable, and a team that ran softer tyres more often will '
+            f'look quicker than it was.</p></div>')
 
 
 def residus(rows, stats):
@@ -782,6 +862,24 @@ header.hero>*{position:relative;z-index:1}
 .avert{margin-top:var(--e4);padding-top:var(--e3);border-top:1px solid var(--bord);
   font-size:12.5px;color:var(--txt3);line-height:1.6}
 
+/* race pace */
+.ry{display:grid;grid-template-columns:30px 280px 1fr 64px;gap:var(--e3);
+  align-items:center;padding:9px 0;
+  border-bottom:1px solid rgba(255,255,255,.035)}
+.ry:last-of-type{border-bottom:0}
+.ry-r{font-family:var(--mono);font-size:12px;color:var(--txt3)}
+.ry-n{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.ry-n span{display:block;font-family:var(--mono);font-size:9.5px;color:var(--txt3);
+  font-weight:400;letter-spacing:.04em;margin-top:3px}
+.ry-p{height:8px;background:#171b26;border-radius:4px;overflow:hidden}
+.ry-p i{display:block;height:100%;width:var(--w);border-radius:4px}
+.ry-v{font-family:var(--mono);font-size:13px;text-align:right;color:var(--txt2)}
+@media(max-width:820px){
+  .ry{grid-template-columns:26px 1fr 62px;row-gap:4px;padding:12px 0}
+  .ry-v{grid-column:3;grid-row:1}
+  .ry-p{grid-column:1/-1;grid-row:2}}
+
 /* residuals */
 .rs{display:grid;grid-template-columns:270px 1fr 46px;gap:14px;align-items:center;
   padding:9px 0;border-bottom:1px solid rgba(255,255,255,.035)}
@@ -833,7 +931,7 @@ JS = """
    here. */
 """ 
 NAV = [("force","Driver strength"),("residus","Residuals"),
-       ("bareme","Scoring systems"),
+       ("rythme","Race pace"),("bareme","Scoring systems"),
        ("voiture","Car or driver"),("saison","Season"),("duels","Team mates"),
        ("domination","Dominance"),("carrieres","Careers")]
 
@@ -908,19 +1006,25 @@ def rendre(d):
                  + '<div class="grille">'
                  + residus(d["residus"], d["residu_stats"]) + '</div>')
 
+    corps.append('<span id="rythme"></span>'
+                 + titre("03", f"Race pace, {d['rythme_saison']}")
+                 + '<div class="grille">'
+                 + rythme(d["rythme"], d["rythme_stats"], d["rythme_saison"])
+                 + '</div>')
+
     corps.append('<span id="bareme"></span>'
-                 + titre("03", "The rules as a variable")
+                 + titre("04", "The rules as a variable")
                  + '<div class="grille">'
                  + bascules_tbl(d["bascules"], d["bascule_n"])
                  + barres("Most wins, all time", "drivers, every season in the "
                           "warehouse", d["vp"]) + '</div>')
 
     corps.append('<span id="voiture"></span>'
-                 + titre("04", "Car or driver")
+                 + titre("05", "Car or driver")
                  + '<div class="grille">' + courbe_voiture(d["voiture"]) + '</div>')
 
     corps.append('<span id="saison"></span>'
-                 + titre("05", f"The {an} season")
+                 + titre("06", f"The {an} season")
                  + '<div class="grille">'
                  + chart_bataille(d["bataille"], an)
                  + table_classement(cls, an)
@@ -929,16 +1033,16 @@ def rendre(d):
                  + '</div>')
 
     corps.append('<span id="duels"></span>'
-                 + titre("06", "Same car, different driver")
+                 + titre("07", "Same car, different driver")
                  + '<div class="grille">' + duels(d["h2h"], d["h2h_bas"])
                  + partages(d["partages"]) + '</div>')
 
     corps.append('<span id="domination"></span>'
-                 + titre("07", "Eras of dominance")
+                 + titre("08", "Eras of dominance")
                  + '<div class="grille">' + aires(d["saisons"], d["series"]) + '</div>')
 
     corps.append('<span id="carrieres"></span>'
-                 + titre("08", "Slowly changing history")
+                 + titre("09", "Slowly changing history")
                  + '<div class="grille">' + frise(d["frise"], s0, s1) + '</div>')
 
     pied = (f'<footer><span>Source <code>api.jolpi.ca/ergast</code>, seasons {s0} to '
