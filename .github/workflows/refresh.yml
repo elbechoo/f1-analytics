@@ -189,7 +189,12 @@ jobs:
       - name: Build and test
         if: steps.verdict.outputs.change == 'true'
         working-directory: dbt
-        run: dbt build --profiles-dir .
+        # deps first. dbt_packages/ is gitignored, correctly, so dbt_utils is
+        # not on the runner until it is installed. Locally it survives between
+        # runs and is easy to forget, which is how it was missing here.
+        run: |
+          dbt deps
+          dbt build --profiles-dir .
 
       - name: Render the page
         if: steps.verdict.outputs.change == 'true'
