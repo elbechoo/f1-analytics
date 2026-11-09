@@ -229,10 +229,18 @@ def tuile(valeur, etiquette, note="", grand=False):
     return (f'<div class="{cl}"><div class="val">{e(valeur)}</div>'
             f'<div class="et">{e(etiquette)}</div>{n}</div>')
 
-def titre(num, t, st):
+def titre(num, t, st=None):
+    """Section heading.
+
+    `st` is accepted and ignored. Every section used to carry a second
+    all-caps label to the right of its title, which on inspection restated
+    the title in different words ("Where the model is wrong" / "RESIDUALS")
+    and appeared often enough to read as furniture rather than as
+    information. The number stays: the sections build on each other in order
+    and the reader is told where they are.
+    """
     return (f'<div class="shead"><span class="snum">{num}</span>'
-            f'<h2>{e(t)}</h2><span class="srule"></span>'
-            f'<span class="ssub">{e(st)}</span></div>')
+            f'<h2>{e(t)}</h2><span class="srule"></span></div>')
 
 def chart_bataille(rows, an):
     """Cumulative points by round for the leading drivers of the season."""
@@ -525,12 +533,16 @@ def partages(rows):
 CSS = """
 :root{
   --fond:#06070b; --fond2:#0b0d14; --carte:#10131d; --bord:#1e2331;
-  --txt:#f2f4f8; --txt2:#9aa3b5; --txt3:#5d6577;
+  --txt:#f2f4f8; --txt2:#9aa3b5; --txt3:#7d8796;
   --rouge:#ff2800; --rouge2:#ff6a4d; --cyan:#00d7b6; --bleu:#3671f5;
   --mono:"Azeret Mono",ui-monospace,"SF Mono",Consolas,monospace;
   --sans:"Chivo","Segoe UI",Helvetica,Arial,sans-serif;
   --disp:"Bricolage Grotesque","Arial Narrow",Helvetica,sans-serif;
   --r:14px;
+  /* One scale. Every margin, gap and pad below comes from it, so related
+     elements line up without anyone eyeballing a value. */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:24px; --e6:32px;
+  --e7:48px; --e8:72px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;scroll-padding-top:86px}
@@ -544,10 +556,10 @@ body{
     linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
   background-size:auto,auto,64px 64px,64px 64px;
 }
-.wrap{max-width:1360px;margin:0 auto;padding:0 28px 96px}
+.wrap{max-width:1360px;margin:0 auto;padding:0 var(--e5) var(--e8)}
 
 /* en-tete */
-header.hero{padding:64px 0 36px;position:relative}
+header.hero{padding:var(--e8) 0 var(--e6);position:relative}
 .marque{display:flex;align-items:center;gap:16px}
 .mk{width:58px;height:33px;flex:none}
 .wm{font-family:var(--disp);font-weight:800;letter-spacing:.01em;font-size:26px;
@@ -560,13 +572,14 @@ h1{font-family:var(--disp);font-size:clamp(42px,7.8vw,92px);line-height:.9;
   margin:40px 0 0;max-width:15ch}
 h1 i{font-style:normal;color:var(--txt3)}
 .sstitre{margin-top:22px;max-width:62ch;color:var(--txt2);font-size:16.5px}
-.specs{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:34px;
-  padding-top:26px;border-top:1px solid var(--bord);max-width:1050px}
+.specs{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--e5) var(--e6);
+  margin-top:var(--e6);padding-top:var(--e5);border-top:1px solid var(--bord);
+  max-width:900px}
 .specs div{font-size:13.5px;color:var(--txt2);line-height:1.62}
 .specs b{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.17em;
   color:var(--rouge2);text-transform:uppercase;font-weight:500;margin-bottom:9px}
-@media(max-width:820px){.specs{grid-template-columns:1fr;gap:16px}}
-.puces{display:flex;gap:9px;flex-wrap:wrap;margin-top:26px}
+@media(max-width:820px){.specs{grid-template-columns:1fr;gap:var(--e4)}}
+.puces{display:flex;gap:var(--e2);flex-wrap:wrap;margin-top:var(--e5)}
 .puce{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
   padding:7px 13px;border:1px solid var(--bord);border-radius:999px;
   color:var(--txt2);background:rgba(255,255,255,.025)}
@@ -592,7 +605,8 @@ nav a{font-family:var(--sans);font-size:11.5px;font-weight:600;
 nav a:hover{color:var(--txt);border-bottom-color:var(--rouge)}
 
 /* bento */
-.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-bottom:18px}
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--e3);
+  margin-bottom:var(--e4)}
 .tuile{grid-column:span 3;background:
    linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
   border:1px solid var(--bord);border-radius:var(--r);padding:22px 22px 20px;
@@ -601,12 +615,11 @@ nav a:hover{color:var(--txt);border-bottom-color:var(--rouge)}
   pointer-events:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.055)}
 .tuile.grande{grid-column:span 6;padding:30px 28px 26px}
 .tuile .val{font-family:var(--mono);font-weight:700;letter-spacing:-.045em;
-  font-size:clamp(34px,4.1vw,52px);line-height:1;
-  background:linear-gradient(100deg,var(--txt) 20%,var(--txt3));
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.tuile.grande .val{font-size:clamp(46px,6.6vw,80px);
-  background:linear-gradient(100deg,#fff 10%,var(--rouge) 115%);
-  -webkit-background-clip:text;background-clip:text}
+  font-size:clamp(34px,4.1vw,52px);line-height:1;color:var(--txt)}
+/* Solid, not a gradient. A gradient across a numeral fades its last digits
+   toward the background, which costs legibility on the one element the page
+   exists to show. The hero figure is distinguished by size, not by colour. */
+.tuile.grande .val{font-size:clamp(46px,6.6vw,80px)}
 .tuile .et{font-family:var(--mono);font-size:10.5px;letter-spacing:.17em;
   color:var(--txt3);margin-top:13px}
 .tuile .note{color:var(--txt2);font-size:13px;margin-top:9px;max-width:40ch}
@@ -614,19 +627,20 @@ nav a:hover{color:var(--txt);border-bottom-color:var(--rouge)}
 @media(max-width:620px){.tuile{grid-column:span 12}}
 
 /* sections */
-.shead{display:flex;align-items:baseline;gap:14px;margin:72px 0 20px;flex-wrap:wrap}
+.shead{display:flex;align-items:baseline;gap:var(--e3);
+  margin:var(--e8) 0 var(--e4);flex-wrap:wrap}
 .snum{font-family:var(--mono);font-size:11px;color:var(--rouge);letter-spacing:.14em}
 .shead h2{font-family:var(--disp);font-size:clamp(22px,2.7vw,32px);
   letter-spacing:-.02em;font-weight:800;font-stretch:88%;text-transform:uppercase}
 .srule{flex:1;height:1px;background:linear-gradient(90deg,var(--bord),transparent);
   min-width:30px}
 .ssub{font-family:var(--mono);font-size:10.5px;color:var(--txt3);letter-spacing:.09em}
-.grille{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.grille{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--e3)}
 .carte{grid-column:span 6;background:var(--carte);border:1px solid var(--bord);
   border-radius:var(--r);padding:22px 24px 26px;overflow:hidden}
 .carte.large{grid-column:span 12}
 @media(max-width:960px){.carte{grid-column:span 12}}
-.chd{margin-bottom:20px}
+.chd{margin-bottom:var(--e4)}
 .chd h3{font-family:var(--disp);font-size:17.5px;letter-spacing:-.005em;
   font-weight:700;font-stretch:92%}
 .chs{display:block;color:var(--txt3);font-size:12.5px;margin-top:5px;max-width:74ch}
@@ -638,13 +652,12 @@ nav a:hover{color:var(--txt);border-bottom-color:var(--rouge)}
 .ar{text-anchor:end}.am{text-anchor:middle}
 .ln.doux{stroke-width:2;filter:none}
 .ln{fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;
-  filter:drop-shadow(0 0 7px currentColor);
   stroke-dasharray:var(--dl);stroke-dashoffset:var(--dl);
   animation:trace 2.1s cubic-bezier(.3,.7,.2,1) forwards}
 @keyframes trace{to{stroke-dashoffset:0}}
 .lb{font-family:var(--mono);font-size:12px;font-weight:600}
 .lbp{fill:var(--txt2);font-weight:400}
-.lgd{display:flex;gap:16px;flex-wrap:wrap;margin-top:18px}
+.lgd{display:flex;gap:var(--e4);flex-wrap:wrap;margin-top:var(--e4)}
 .li{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--txt2)}
 .li i{width:11px;height:11px;border-radius:3px;flex:none}
 
@@ -663,9 +676,7 @@ table.tb-cl{width:100%;border-collapse:collapse;font-size:13.5px}
 .num{font-family:var(--mono);text-align:right;width:62px}
 .fort{color:var(--txt);font-weight:700}
 td.bar{width:34%;padding-right:0}
-td.bar i{display:block;height:5px;border-radius:3px;width:var(--w);
-  animation:grow 1.3s cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes grow{from{width:0}to{width:var(--w)}}
+td.bar i{display:block;height:5px;border-radius:3px;width:var(--w)}
 
 /* duels */
 .dlg{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;
@@ -681,7 +692,7 @@ td.bar i{display:block;height:5px;border-radius:3px;width:var(--w);
 .dbar{display:flex;height:22px;border-radius:5px;overflow:hidden;background:#171b26}
 .dbar i{display:flex;align-items:center;font-style:normal}
 .dbar b{font-family:var(--mono);font-size:10.5px;padding:0 7px;font-weight:600}
-.dg{width:var(--w);animation:grow 1.3s cubic-bezier(.2,.8,.2,1) forwards}
+.dg{width:var(--w)}
 .dg.v{background:linear-gradient(90deg,#00a98f,var(--cyan))}
 .dg.r{background:linear-gradient(90deg,#8e1b00,var(--rouge))}
 .dg b{color:#04110e}
@@ -697,8 +708,7 @@ td.bar i{display:block;height:5px;border-radius:3px;width:var(--w);
 .bn{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
 .bp{height:8px;background:#171b26;border-radius:4px;overflow:hidden}
-.bp i{display:block;height:100%;width:var(--w);border-radius:4px;
-  animation:grow 1.3s cubic-bezier(.2,.8,.2,1) forwards}
+.bp i{display:block;height:100%;width:var(--w);border-radius:4px}
 .bv{font-family:var(--mono);font-size:13px;text-align:right;color:var(--txt2)}
 
 /* frise */
@@ -718,14 +728,13 @@ td.bar i{display:block;height:5px;border-radius:3px;width:var(--w);
   transform:translateX(-50%)}
 @media(max-width:700px){.fl{grid-template-columns:100px 1fr}.fax{margin-left:114px}}
 
-footer{margin-top:84px;padding-top:30px;border-top:1px solid var(--bord);
-  color:var(--txt3);font-size:12.5px;display:flex;gap:30px;flex-wrap:wrap}
+footer{margin-top:var(--e8);padding-top:var(--e5);border-top:1px solid var(--bord);
+  color:var(--txt3);font-size:12.5px;display:flex;gap:var(--e5);flex-wrap:wrap}
 footer code{font-family:var(--mono);color:var(--txt2);font-size:12px}
 footer a{color:var(--txt2)}
 @media(prefers-reduced-motion:reduce){
-  *{animation:none!important}
+  *{animation:none!important;transition:none!important}
   .ln{stroke-dashoffset:0}
-  td.bar i,.dg,.bp i{width:var(--w)}
 }
 /* artwork */
 .trk{position:absolute;top:40px;right:-40px;width:min(44vw,520px);height:auto;
@@ -733,9 +742,8 @@ footer a{color:var(--txt2)}
 #lap{fill:none}
 .trk-b{stroke:rgba(255,255,255,.07);stroke-width:22;stroke-linejoin:round}
 .trk-f{stroke:var(--rouge);stroke-width:2;stroke-dasharray:1600;
-  stroke-dashoffset:1600;animation:trace 3.4s ease-out .3s forwards;
-  filter:drop-shadow(0 0 10px rgba(255,40,0,.8))}
-.trk-c{fill:#fff;filter:drop-shadow(0 0 9px #fff)}
+  stroke-dashoffset:1600;animation:trace 3.4s ease-out .3s forwards}
+.trk-c{fill:#fff}
 header.hero>*{position:relative;z-index:1}
 @media(max-width:860px){.trk{display:none}}
 .ondes{display:block;width:100%;height:58px;margin:0 0 -8px;opacity:.5}
@@ -754,17 +762,16 @@ header.hero>*{position:relative;z-index:1}
 .fo-p{position:relative;height:20px}
 .fo-p::before{content:"";position:absolute;left:0;right:0;top:9px;height:2px;
   background:rgba(255,255,255,.05)}
-.fo-i{position:absolute;top:6px;height:8px;border-radius:5px;opacity:.38;
-  font-style:normal;animation:fade .9s ease forwards}
+.fo-i{position:absolute;top:6px;height:8px;border-radius:5px;opacity:.42;
+  font-style:normal}
 .fo-d{position:absolute;top:2px;width:16px;height:16px;border-radius:50%;
-  margin-left:-8px;border:3px solid var(--carte);box-shadow:0 0 12px currentColor}
-@keyframes fade{from{opacity:0}to{opacity:.38}}
+  margin-left:-8px;border:3px solid var(--carte)}
 .fo-v{font-family:var(--mono);font-size:14px;font-weight:700;text-align:right}
 @media(max-width:820px){
   .fo{grid-template-columns:26px 1fr 54px;row-gap:4px;padding:12px 0}
   .fo-v{grid-column:3;grid-row:1}
   .fo-p{grid-column:1/-1;grid-row:2}}
-.avert{margin-top:20px;padding-top:15px;border-top:1px solid var(--bord);
+.avert{margin-top:var(--e4);padding-top:var(--e3);border-top:1px solid var(--bord);
   font-size:12.5px;color:var(--txt3);line-height:1.6}
 
 /* residuals */
@@ -778,8 +785,7 @@ header.hero>*{position:relative;z-index:1}
 .rs-t{position:relative;height:16px;background:#141821;border-radius:4px}
 .rs-t u{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;
   background:rgba(255,255,255,.22)}
-.rs-t i{position:absolute;top:3px;height:10px;border-radius:3px;font-style:normal;
-  animation:fade .9s ease forwards}
+.rs-t i{position:absolute;top:3px;height:10px;border-radius:3px;font-style:normal}
 .rs-p{background:linear-gradient(90deg,var(--rouge),var(--rouge2))}
 .rs-n{background:linear-gradient(90deg,#00a98f,var(--cyan))}
 .rs-v{font-family:var(--mono);font-size:13px;text-align:right;color:var(--txt2)}
@@ -788,10 +794,14 @@ header.hero>*{position:relative;z-index:1}
   .rs-v{grid-column:2;grid-row:1}
   .rs-t{grid-column:1/-1;grid-row:2}}
 
-/* motion */
-.rv{opacity:0;transform:translateY(22px);
-  transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
-.rv.in{opacity:1;transform:none}
+/* Keyboard focus. There was none at all, so a keyboard user could tab the
+   nav and see nothing move. Ring rather than outline so it clears the sticky
+   nav's bottom border, and :focus-visible so a mouse click does not draw it. */
+:focus-visible{outline:2px solid var(--rouge2);outline-offset:3px;
+  border-radius:4px}
+nav a:focus-visible{outline-offset:-4px}
+
+/* motion: feedback only */
 .carte{transition:border-color .25s,transform .25s,box-shadow .25s}
 .carte:hover{border-color:#2d3447;transform:translateY(-3px);
   box-shadow:0 18px 46px -24px rgba(0,0,0,.95)}
@@ -800,46 +810,20 @@ header.hero>*{position:relative;z-index:1}
 .puce{transition:border-color .2s,color .2s,transform .2s}
 .puce:hover{color:var(--txt);border-color:#39415a;transform:translateY(-2px)}
 .tb-cl tbody tr{transition:background .18s}
-@media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none}}
 
 """
 
 JS = """
-(function(){
-  var red = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var cibles = document.querySelectorAll('.carte,.tuile,.shead');
-  if(red){ return; }
-  cibles.forEach(function(n){ n.classList.add('rv'); });
-  var io = new IntersectionObserver(function(es){
-    es.forEach(function(x){
-      if(!x.isIntersecting) return;
-      var i = [].indexOf.call(x.target.parentNode.children, x.target);
-      x.target.style.transitionDelay = Math.min(i,6)*55 + 'ms';
-      x.target.classList.add('in');
-      io.unobserve(x.target);
-    });
-  }, {rootMargin:'0px 0px -8% 0px', threshold:.08});
-  cibles.forEach(function(n){ io.observe(n); });
+/* Deliberately small. An earlier version faded every card in on scroll and
+   counted the headline figures up from zero. Both were decoration: they told
+   the reader nothing that the page does not already say, and they delayed the
+   numbers behind an animation on every visit. What is left is the chart line
+   drawing along its own time axis, which is in the CSS and does carry meaning,
+   plus hover and focus feedback.
 
-  // count the big tile numbers up once they are on screen
-  var io2 = new IntersectionObserver(function(es){
-    es.forEach(function(x){
-      if(!x.isIntersecting) return;
-      var el = x.target, fin = parseFloat(el.dataset.v), t0 = null, d = 1100;
-      function pas(t){
-        if(!t0) t0 = t;
-        var k = Math.min((t-t0)/d, 1), q = 1-Math.pow(1-k,3);
-        el.textContent = Math.round(fin*q).toLocaleString('en-US')
-                           .replace(/,/g,'\u202f');
-        if(k<1) requestAnimationFrame(pas);
-      }
-      requestAnimationFrame(pas); io2.unobserve(el);
-    });
-  }, {threshold:.4});
-  document.querySelectorAll('.val[data-v]').forEach(function(n){ io2.observe(n); });
-})();
-"""
-
+   Reserved for behaviour that needs it later; no entrance animation belongs
+   here. */
+""" 
 NAV = [("force","Driver strength"),("residus","Residuals"),
        ("bareme","Scoring systems"),
        ("voiture","Car or driver"),("saison","Season"),("duels","Team mates"),
@@ -874,8 +858,12 @@ def rendre(d):
     tete = (
       f'<header class="hero" id="top">{CIRCUIT}<div class="marque">{MARQUE}'
       f'<div class="wm">APEX<b>//</b>DATA<span>RACE ANALYTICS WAREHOUSE</span></div></div>'
-      f'<h1>{nb(n_res)} results.<br>{s1-s0+1} seasons.<br><i>One model that '
-      f'holds together.</i></h1>'
+      # "One model that holds together" said nothing: it would fit any data
+      # project ever built. The line now states the actual contribution, which
+      # is that the teammate graph puts drivers on one scale who never shared
+      # a garage or an era.
+      f'<h1>{nb(n_res)} results.<br>{s1-s0+1} seasons.<br><i>One scale for '
+      f'drivers who never met.</i></h1>'
       f'<p class="sstitre">An analytics engineering project: a dimensional warehouse '
       f'built with dbt over the complete results history of world championship motor '
       f'racing, {s0} to {s1}. Every figure on this page is read from the warehouse at '
@@ -903,28 +891,28 @@ def rendre(d):
 
     corps = []
     corps.append('<span id="force"></span>'
-                 + titre("01", "Who was actually quick", "MODELLED, NOT COUNTED")
+                 + titre("01", "Who was actually quick")
                  + '<div class="grille">'
                  + classement_force(d["force"], d["force_stats"]) + '</div>')
 
     corps.append('<span id="residus"></span>'
-                 + titre("02", "Where the model is wrong", "RESIDUALS")
+                 + titre("02", "Where the model is wrong")
                  + '<div class="grille">'
                  + residus(d["residus"], d["residu_stats"]) + '</div>')
 
     corps.append('<span id="bareme"></span>'
-                 + titre("03", "The rules as a variable", "COUNTERFACTUAL SCORING")
+                 + titre("03", "The rules as a variable")
                  + '<div class="grille">'
                  + bascules_tbl(d["bascules"], d["bascule_n"])
                  + barres("Most wins, all time", "drivers, every season in the "
                           "warehouse", d["vp"]) + '</div>')
 
     corps.append('<span id="voiture"></span>'
-                 + titre("04", "Car or driver", "VARIANCE EXPLAINED")
+                 + titre("04", "Car or driver")
                  + '<div class="grille">' + courbe_voiture(d["voiture"]) + '</div>')
 
     corps.append('<span id="saison"></span>'
-                 + titre("05", f"The {an} season", "CURRENT CHAMPIONSHIP")
+                 + titre("05", f"The {an} season")
                  + '<div class="grille">'
                  + chart_bataille(d["bataille"], an)
                  + table_classement(cls, an)
@@ -933,16 +921,16 @@ def rendre(d):
                  + '</div>')
 
     corps.append('<span id="duels"></span>'
-                 + titre("06", "Same car, different driver", "RAW HEAD TO HEAD")
+                 + titre("06", "Same car, different driver")
                  + '<div class="grille">' + duels(d["h2h"], d["h2h_bas"])
                  + partages(d["partages"]) + '</div>')
 
     corps.append('<span id="domination"></span>'
-                 + titre("07", "Eras of dominance", "SHARE OF WINS")
+                 + titre("07", "Eras of dominance")
                  + '<div class="grille">' + aires(d["saisons"], d["series"]) + '</div>')
 
     corps.append('<span id="carrieres"></span>'
-                 + titre("08", "Slowly changing history", "DIMENSION TYPE 2")
+                 + titre("08", "Slowly changing history")
                  + '<div class="grille">' + frise(d["frise"], s0, s1) + '</div>')
 
     pied = (f'<footer><span>Source <code>api.jolpi.ca/ergast</code>, seasons {s0} to '

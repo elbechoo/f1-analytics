@@ -133,23 +133,32 @@ jobs:
           fi
 
       # The gate. Hash the season's stored payloads and compare with the hash
-      # the previous run left in the cache. A hash rather than a row count,
-      # because a penalty applied after the race rewrites a classification
-      # without adding a row, and a count would call that "no change".
+      # the LAST SUCCESSFUL BUILD left in the cache. A hash rather than a row
+      # count, because a penalty applied after the race rewrites a
+      # classification without adding a row, and a count would call that
+      # "no change".
+      #
+      # The comparison value is written at the end, after the page renders,
+      # and never here. Writing it at this point was a real bug and it
+      # deadlocked the pipeline: a run that fetched and then failed had
+      # already recorded its fingerprint, so every later run compared against
+      # it, concluded nothing had changed, skipped the build and exited green.
+      # The page could never be produced, and the workflow reported success
+      # while doing so. A fingerprint means "this data has been successfully
+      # published", so only a successful publish may write one.
       - name: Did anything change
         id: verdict
         run: |
           nouveau=$(python ingest/empreinte.py "${{ steps.saison.outputs.annee }}")
           ancien=$(cat .empreinte 2>/dev/null || echo "aucun")
-          echo "$nouveau" > .empreinte
+          echo "nouveau=$nouveau" >> "$GITHUB_OUTPUT"
           if [ "${{ inputs.force }}" = "true" ]; then
-            echo "forced by hand"
-            echo "change=true" >> "$GITHUB_OUTPUT"
+            echo "forced by hand"; echo "change=true" >> "$GITHUB_OUTPUT"
           elif [ "$nouveau" = "$ancien" ]; then
-            echo "nothing new since the last run, stopping here"
+            echo "nothing new since the last successful build, stopping here"
             echo "change=false" >> "$GITHUB_OUTPUT"
           else
-            echo "new or amended results found"
+            echo "new or amended results, or the last build never completed"
             echo "change=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -190,6 +199,12 @@ jobs:
         if: steps.verdict.outputs.change == 'true'
         with:
           path: dashboard
+
+      # Only now. Everything above has to have worked for this data to count
+      # as published.
+      - name: Record what was published
+        if: steps.verdict.outputs.change == 'true'
+        run: echo "${{ steps.verdict.outputs.nouveau }}" > .empreinte
 
       # Unconditionally, including after a failure: see the restore step.
       - name: Save the warehouse
