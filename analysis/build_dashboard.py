@@ -947,7 +947,11 @@ def rendre(d):
     cls = d["classement"]
     meneur = cls[0] if cls else None
 
-    nav = "".join(f'<a href="#{i}">{e(t)}</a>' for i, t in NAV)
+    sections = {i for i, _ in NAV}
+    if not (d["rythme"] and d["rythme_saison"]):
+        sections.discard("rythme")
+    nav = "".join(f'<a href="#{i}">{e(t)}</a>'
+                  for i, t in NAV if i in sections)
     puces = "".join(f'<span class="puce{" on" if o else ""}">{e(t)}</span>' for t, o in [
         ("dbt", True), ("DUCKDB", False), ("SQL", False),
         ("KIMBALL STAR SCHEMA", False), ("SCD TYPE 2", False),
@@ -1011,11 +1015,18 @@ def rendre(d):
                  + '<div class="grille">'
                  + residus(d["residus"], d["residu_stats"]) + '</div>')
 
-    corps.append('<span id="rythme"></span>'
-                 + titre("03", f"Race pace, {d['rythme_saison']}")
-                 + '<div class="grille">'
-                 + rythme(d["rythme"], d["rythme_stats"], d["rythme_saison"])
-                 + '</div>')
+    # Omitted entirely when there is no lap data, rather than rendered as an
+    # empty heading. The scheduled job does not fetch lap timings (they would
+    # exhaust the hourly rate limit in one run), so the warehouse it builds
+    # legitimately has none, and a section titled "Race pace, None" with
+    # nothing under it is worse than no section at all. The page check asserts
+    # both directions of this.
+    if d["rythme"] and d["rythme_saison"]:
+        corps.append('<span id="rythme"></span>'
+                     + titre("03", f"Race pace, {d['rythme_saison']}")
+                     + '<div class="grille">'
+                     + rythme(d["rythme"], d["rythme_stats"], d["rythme_saison"])
+                     + '</div>')
 
     corps.append('<span id="bareme"></span>'
                  + titre("04", "The rules as a variable")

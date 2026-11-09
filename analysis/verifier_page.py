@@ -106,9 +106,28 @@ def verifier(h: str, con) -> list[str]:
             )
 
     # --- the race pace table ----------------------------------------------
+    # Conditional, because the warehouse legitimately comes in two shapes.
+    # The scheduled job does not fetch lap timings, so the page it builds has
+    # no pace section at all; a local build with laps loaded does. Asserting
+    # the section is always present failed the pipeline for the right reason
+    # and the wrong one: it was demanding data the job never collects.
+    #
+    # Both directions are checked. Laps present means the section must exist
+    # and be sound; laps absent means it must be gone rather than rendered
+    # empty with a null in its title, which is what the page actually did.
+    relais = con.execute(
+        "select count(*) from information_schema.tables "
+        "where table_name = 'fct_rythme_relais'").fetchone()[0] and con.execute(
+        "select count(*) from main_marts.fct_rythme_relais").fetchone()[0]
+
     pace = re.search(r'<span id="rythme">.*?<span id="bareme">', h, re.S)
-    if not pace:
-        fautes.append("the race pace section is missing")
+    if not relais:
+        exiger(pace is None,
+               "no lap data in the warehouse, but the page has a pace section")
+        exiger('href="#rythme"' not in h,
+               "the nav links to a pace section that was not rendered")
+    elif not pace:
+        fautes.append("the warehouse has stints but the page has no pace section")
     else:
         bloc = pace.group(0)
 
