@@ -189,13 +189,18 @@ def collecter(con):
                (select fr.ecurie_id from main_marts.fct_resultat fr
                  where fr.pilote_id = e.pilote_id and fr.saison = ?
                  order by fr.manche desc limit 1) as eid,
-               (select count(*) + 1 from main_marts.fct_resultat x
-                 where x.saison = ?
-                 group by x.pilote_id
-                 having sum(x.points) > (
-                   select sum(y.points) from main_marts.fct_resultat y
-                   where y.saison = ? and y.pilote_id = e.pilote_id)
-                 limit 1) as rang_points
+               -- Drivers with more points than this one, plus one. The
+               -- first version grouped by driver and counted that driver's
+               -- rows, which is not a rank and is not anything.
+               (select count(*) + 1
+                  from (select pilote_id, sum(points) as pts
+                          from main_marts.fct_resultat
+                         where saison = ? group by 1) t
+                 where t.pts > (select sum(y.points)
+                                  from main_marts.fct_resultat y
+                                 where y.saison = ?
+                                   and y.pilote_id = e.pilote_id)
+               ) as rang_points
         from ecarts e
         join main_marts.dim_pilote p using (pilote_id)
         order by e.deficit limit 12""",
@@ -484,7 +489,7 @@ def rythme(rows, stats, an):
         c = tc(eid, i)
         lignes.append(
           f'<div class="ry"><div class="ry-r">{i:02d}</div>'
-          f'<div class="ry-n">{e(nom)}<span>{e(ecn)} &middot; {nb} races'
+          f'<div class="ry-n">{e(nom)}<span>{e(ecn)} &middot; {nb_courses} races'
           + (f' &middot; P{rang} on points' if rang else '') + '</span></div>'
           f'<div class="ry-p"><i style="--w:{deficit/mx*100:.1f}%;'
           f'background:{c}"></i></div>'
