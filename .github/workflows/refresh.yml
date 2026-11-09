@@ -200,6 +200,14 @@ jobs:
         if: steps.verdict.outputs.change == 'true'
         run: python analysis/build_dashboard.py
 
+      # Between rendering and publishing, on purpose. The dbt tests assert
+      # things about the warehouse; this asserts things about the page built
+      # from it, which is where every wrong number that reached the public
+      # site actually came from. A page that fails here is not deployed.
+      - name: Check the rendered page
+        if: steps.verdict.outputs.change == 'true'
+        run: python analysis/verifier_page.py
+
       - uses: actions/upload-pages-artifact@v3
         if: steps.verdict.outputs.change == 'true'
         with:
