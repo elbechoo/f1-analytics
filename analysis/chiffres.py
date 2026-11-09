@@ -26,7 +26,7 @@ REQUETES = [
     # number of duels. Dividing here rather than in the caller, because a
     # figure that needs a mental correction before use will eventually be
     # quoted without it.
-    ("duels",      "select count(*) / 2 from main_marts.fct_duel_coequipiers"),
+    ("duels",      "select (count(*) / 2)::bigint from main_marts.fct_duel_coequipiers"),
     ("scd2",       "select count(*) from main_marts.dim_pilote_ecurie_scd2"),
     ("classables", "select count(*) from main_marts.fct_force_pilote "
                    "where classable"),

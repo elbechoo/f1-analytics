@@ -30,7 +30,15 @@ PALETTE = ["#ff2800","#00d7b6","#3671f5","#ff8000","#ffd400","#b06bff","#00e701"
 
 def tc(eid, i=0): return TEAM.get(eid, PALETTE[i % len(PALETTE)])
 def e(s): return html.escape(str(s if s is not None else ""))
-def nb(x): return f"{x:,}".replace(",", " ")
+def nb(x):
+    """Format a count with thin-space grouping.
+
+    Coerces to int on the way through. Every caller passes a count, and any
+    division in DuckDB returns a double, so `count(*) / 2` once reached the
+    published page as "5 353.0". Fixed at the query as well; this stops the
+    next one of those reaching a reader.
+    """
+    return f"{int(round(float(x))):,}".replace(",", " ")
 
 # ─────────────────────────────────────────────────────────────── queries ──
 def collecter(con):
@@ -41,7 +49,7 @@ def collecter(con):
         (select count(*) from main_marts.dim_pilote),
         (select count(*) from main_marts.dim_ecurie),
         (select count(*) from main_marts.dim_pilote_ecurie_scd2),
-        (select count(*) / 2 from main_marts.fct_duel_coequipiers),
+        (select (count(*) / 2)::bigint from main_marts.fct_duel_coequipiers),
         (select min(saison) from main_marts.dim_course),
         (select max(saison) from main_marts.dim_course)""").fetchone()
 
